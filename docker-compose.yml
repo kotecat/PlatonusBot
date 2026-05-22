@@ -1,0 +1,9 @@
+services:
+  plt-notify-autochecker:
+    build: .
+    network_mode: host
+    restart: always
+    volumes:
+      - .:/app
+    env_file:
+      - .env
