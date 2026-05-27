@@ -1,18 +1,30 @@
 import json
 import math
+from os import path
+from pathlib import Path
+
+from config import app_config
 
 
 def save_json(data: dict, filename: str):
-    with open(filename, "w", encoding="utf-8") as f:
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def load_json(filename: str, default: list = []) -> list:
+def load_json(filename: str, default=None):
+    if default is None:
+        default = []
     try:
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return default
+
+
+def get_journal_path(user_id: int, login: str, year: int, semester: int) -> str:
+    return path.join(app_config.JOURNAL_DIRECTORY, str(user_id), f"{login}_{year}_{semester}.json")
 
 
 def diff_journal(old_journal: list[dict], new_journal: list[dict]) -> list[dict]:
@@ -25,6 +37,9 @@ def diff_journal(old_journal: list[dict], new_journal: list[dict]) -> list[dict]
     """
     changes = []
 
+    if old_journal is None:
+        return changes
+    
     old_map = {s["subjectID"]: s for s in old_journal}
     new_map = {s["subjectID"]: s for s in new_journal}
 
@@ -118,14 +133,14 @@ def make_journal_string(journal: list[dict]) -> str:
             f"{color_mark} {total_mark}{exam_text}\n"
         )
 
-    return result_text
+    return result_text or "<i><b>Нет данных в журнале.</b></i>"
 
 
-def make_changes_string(changes: list[dict]) -> str:
+def make_changes_string(changes: list[dict], year: int = 2000, semester: str = "1") -> str:
     if not changes:
         return "Нет изменений в оценках."
 
-    result_text = "Изменения в оценках:\n"
+    result_text = f"❗️<b>Изменения в оценках ({year} / {semester})</b>\n"
     current_subject = None
 
     for change in changes:
@@ -145,3 +160,24 @@ def make_changes_string(changes: list[dict]) -> str:
             result_text += f"   • {exam_name}: {old} → {value}\n"
 
     return result_text
+
+
+_CYR_TO_LAT = {
+    'а': 'a',  'б': 'b',  'в': 'v',  'г': 'g',  'д': 'd',
+    'е': 'e',  'ё': 'yo', 'ж': 'zh', 'з': 'z',  'и': 'i',
+    'й': 'j',  'к': 'k',  'л': 'l',  'м': 'm',  'н': 'n',
+    'о': 'o',  'п': 'p',  'р': 'r',  'с': 's',  'т': 't',
+    'у': 'u',  'ф': 'f',  'х': 'h',  'ц': 'ts', 'ч': 'ch',
+    'ш': 'sh', 'щ': 'sch','ъ': '',   'ы': 'y',  'ь': '',
+    'э': 'e',  'ю': 'yu', 'я': 'ya',
+    # казахские буквы
+    'ә': 'a',  'ғ': 'g',  'қ': 'k',  'ң': 'n',  'ө': 'o',
+    'ұ': 'u',  'ү': 'u',  'һ': 'h',  'і': 'i',
+}
+
+
+def translit(text: str) -> str:
+    result = []
+    for ch in text.lower():
+        result.append(_CYR_TO_LAT.get(ch, ch))
+    return "".join(result)

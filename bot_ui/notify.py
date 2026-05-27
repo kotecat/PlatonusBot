@@ -5,7 +5,7 @@ from pathlib import Path
 
 from aiogram import Bot
 
-from p_api import PlatonusApi
+from api.p_api import PlatonusApi
 from utils import diff_journal, make_changes_string, save_json, load_json
 from config import app_config
 from core import bot

@@ -225,3 +225,5 @@ journals/
 settings/
 
 *.json
+
+storage/
