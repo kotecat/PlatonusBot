@@ -60,7 +60,7 @@ async def university_search_handler(message: Message, state: FSMContext) -> None
     
     universities = await _get_universities()
     query = message.text.strip()
-    keyboard = build_university_keyboard(universities, query)
+    keyboard = build_university_keyboard(universities, message.from_user.id, query)
 
     if not keyboard.inline_keyboard:
         await message.answer(f"❌ Ничего не найдено по запросу «{query}».\nПопробуйте другое название.")
