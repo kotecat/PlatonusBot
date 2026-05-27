@@ -53,8 +53,8 @@ async def command_journal_handler(message: Message) -> None:
     login, password, host = creds
 
     async with PlatonusApi(host=host, login=login, password=password) as api:
-        current_year = (await api.get_current_year()).get("currentYear", app_config.YEAR)
-        current_semester = int((await api.get_current_semester()).get("value", app_config.SEMESTER))
+        current_year = (await api.get_current_year()).get("currentYear", 2000)
+        current_semester = int((await api.get_current_semester()).get("value", 1))
         journal = await api.get_journal(year=current_year, semester=current_semester)
         years = await api.get_journal_years()
         terms = await api.get_journal_semesters()
