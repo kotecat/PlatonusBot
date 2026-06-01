@@ -2,6 +2,7 @@ import json
 import math
 from os import path
 from pathlib import Path
+from schemas.journal import Journal
 
 from config import app_config
 
@@ -20,6 +21,10 @@ def load_json(filename: str, default=None):
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
+        save_json(default, filename)  # Создаем файл с дефолтными данными
+        return default
+    except json.JSONDecodeError:
+        save_json(default, filename)  # Перезаписываем файл, если он поврежден
         return default
 
 
@@ -27,37 +32,28 @@ def get_journal_path(user_id: int, login: str, year: int, semester: int) -> str:
     return path.join(app_config.JOURNAL_DIRECTORY, str(user_id), f"{login}_{year}_{semester}.json")
 
 
-def diff_journal(old_journal: list[dict], new_journal: list[dict]) -> list[dict]:
-    """
-    Сравнивает два снимка журнала и возвращает список изменений.
-
-    Отслеживает:
-    - totalMark (итоговая оценка)
-    - оценки внутри exams (Экз., Ср.тек., РК, Рейтинг и т.д.)
-    """
+def diff_journal(old_journal: list[Journal], new_journal: list[Journal]) -> list[dict]:
     changes = []
 
-    if old_journal is None:
+    if not old_journal:
         return changes
-    
-    old_map = {s["subjectID"]: s for s in old_journal}
-    new_map = {s["subjectID"]: s for s in new_journal}
+
+    old_map = {s.subject_id: s for s in old_journal}
+    new_map = {s.subject_id: s for s in new_journal}
 
     for subject_id, new_subj in new_map.items():
         old_subj = old_map.get(subject_id)
-        subject_name = new_subj["subjectName"]
 
-        # Предмет появился впервые — пропускаем
         if old_subj is None:
             continue
 
         # --- totalMark ---
-        old_total = str(old_subj.get("totalMark", "")).strip()
-        new_total = str(new_subj.get("totalMark", "")).strip()
+        old_total = str(old_subj.total_mark).strip()
+        new_total = str(new_subj.total_mark).strip()
 
         if old_total != new_total and new_total not in ("", "-", "0", "0.0"):
             changes.append({
-                "subject": subject_name,
+                "subject": new_subj.subject_name,
                 "field": "total",
                 "old": old_total,
                 "value": new_total,
@@ -65,21 +61,21 @@ def diff_journal(old_journal: list[dict], new_journal: list[dict]) -> list[dict]
 
         # --- exams ---
         old_exams = {
-            e["name"]: e["mark"]
-            for e in old_subj.get("exams", [])
-            if e.get("name") and e.get("mark") is not None
+            e.name: e.mark
+            for e in old_subj.exams
+            if e.name and e.mark is not None
         }
         new_exams = {
-            e["name"]: e["mark"]
-            for e in new_subj.get("exams", [])
-            if e.get("name") and e.get("mark") is not None
+            e.name: e.mark
+            for e in new_subj.exams
+            if e.name and e.mark is not None
         }
 
         for exam_name, new_mark in new_exams.items():
             old_mark = old_exams.get(exam_name, "0")
             if str(old_mark).strip() != str(new_mark).strip():
                 changes.append({
-                    "subject": subject_name,
+                    "subject": new_subj.subject_name,
                     "field": "exam",
                     "exam_name": exam_name,
                     "old": str(old_mark),
@@ -89,31 +85,23 @@ def diff_journal(old_journal: list[dict], new_journal: list[dict]) -> list[dict]
     return changes
 
 
-def make_journal_string(journal: list[dict]) -> str:
-    print(f"Making journal string for {len(journal)} subjects")
-    result_text = f""
+def make_journal_string(journal: list[Journal]) -> str:
+    result_text = ""
 
     for subject in journal:
-        subject_name = subject.get("subjectName", "Unknown Subject")
-        tutor_list = subject.get("tutorList", "No Tutors")
-        total_mark = subject.get("totalMark", "0.0")
-
         exam_text = "<blockquote expandable>"
 
-        for exam in subject.get("exams", []):
-            if not exam:
+        for exam in subject.exams:
+            if not exam.name:
                 continue
-            exam_name = exam.get("name", "Unknown Exam")
-            exam_mark = exam.get("mark", "0.0")
-
-            exam_text += f"  - {exam_name}: {exam_mark}\n"
+            exam_text += f"  - {exam.name}: {exam.mark or '—'}\n"
 
         exam_text += "</blockquote>"
 
         color_mark = "⚪️"
 
         try:
-            mark_rounded = math.ceil(float(total_mark))
+            mark_rounded = math.ceil(float(subject.total_mark))
 
             if mark_rounded > 0:
                 color_mark = "🔴"
@@ -124,13 +112,13 @@ def make_journal_string(journal: list[dict]) -> str:
             if mark_rounded >= 90:
                 color_mark = "🟢"
 
-        except (ValueError):
+        except ValueError:
             pass
 
         result_text += (
-            f"\n📚 <b>{subject_name}</b>\n"
-            f"{'👥' if ',' in tutor_list else '👤'} {tutor_list}\n"
-            f"{color_mark} {total_mark}{exam_text}\n"
+            f"\n📚 <b>{subject.subject_name}</b>\n"
+            f"{'👥' if ',' in subject.tutor_list else '👤'} {subject.tutor_list}\n"
+            f"{color_mark} {subject.total_mark}{exam_text}\n"
         )
 
     return result_text or "<i><b>Нет данных в журнале.</b></i>"
@@ -160,6 +148,17 @@ def make_changes_string(changes: list[dict], year: int = 2000, semester: str = "
             result_text += f"   • {exam_name}: {old} → {value}\n"
 
     return result_text
+
+
+def get_auth(user_id: int) -> tuple[str, str, str] | None:
+    """Возвращает (login, password, host) или None если не авторизован."""
+    auth_data = load_json(path.join(app_config.AUTH_DIRECTORY, f"{user_id}.json"), default={})
+    login = auth_data.get("login", None)
+    password = auth_data.get("password", None)
+    host = auth_data.get("host", None)
+    if not login or not password or not host:
+        return None
+    return login, password, host
 
 
 _CYR_TO_LAT = {

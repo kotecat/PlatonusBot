@@ -5,12 +5,18 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
+from schemas.terms import (
+    Terms,
+    Years
+)
+
 
 class JournalCallback(CallbackData, prefix="jour"):
     user_id: int
     year: int
     semester: int
     is_back: bool = False
+    has_period: bool = True
 
 
 class JournalFinishCallback(CallbackData, prefix="jour_f"):
@@ -18,19 +24,20 @@ class JournalFinishCallback(CallbackData, prefix="jour_f"):
     year: int
     semester: int
     is_open: bool = False
+    has_period: bool = True
 
     
 async def journal_semester_keyboard(
     user_id: int,
     current_year: int,
     current_semester: int,
-    semesters: list[dict[str, str]]
+    semesters: Terms
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
-    for i, sem in enumerate(semesters, start=1):
-        name = sem.get("name", f"Unknown Semester {i}")
-        id = sem.get("ID", i)
+    for i, sem in enumerate(semesters.terms, start=1):
+        name = sem.name
+        id = sem.id
         
         builder.row(
             InlineKeyboardButton(
@@ -63,12 +70,16 @@ async def journal_year_keyboard(
     current_year: int,
     current_semester: int,
     current_semester_name: str,
-    years: list[int]
+    years: Years,
+    max_year: int
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     buttons_row = []
-    for year in years:
+    
+    for year in years.years:
+        if year > max_year:
+            continue
         buttons_row.append(
             InlineKeyboardButton(
                 text=('✅ ' if year == current_year else '') + str(year),

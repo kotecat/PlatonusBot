@@ -44,6 +44,7 @@ async def set_default_commands(bot: Bot):
             BotCommand(command="start", description="Приветствие и инструкция по использованию бота"),
             BotCommand(command="login", description="Сохранить логин и пароль для доступа к журналу"),
             BotCommand(command="journal", description="Получить информацию о своих оценках"),
+            BotCommand(command="profile", description="Показать информацию о профиле"),
         ]
     )
     
