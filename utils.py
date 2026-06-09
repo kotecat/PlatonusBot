@@ -2,7 +2,7 @@ import json
 import math
 from os import path
 from pathlib import Path
-from schemas.journal import Journal
+from schemas.journal import ExamSchema, Journal, JournalMarksResponse
 
 from config import app_config
 
@@ -30,6 +30,14 @@ def load_json(filename: str, default=None):
 
 def get_journal_path(user_id: int, login: str, year: int, semester: int) -> str:
     return path.join(app_config.JOURNAL_DIRECTORY, str(user_id), f"{login}_{year}_{semester}.json")
+
+
+def _exam_key(exams: list[ExamSchema]) -> dict[int, ExamSchema]:
+    return {
+        i: e
+        for i, e in enumerate(exams)
+        if e.mark is not None
+    }
 
 
 def diff_journal(old_journal: list[Journal], new_journal: list[Journal]) -> list[dict]:
@@ -60,32 +68,24 @@ def diff_journal(old_journal: list[Journal], new_journal: list[Journal]) -> list
             })
 
         # --- exams ---
-        old_exams = {
-            e.name: e.mark
-            for e in old_subj.exams
-            if e.name and e.mark is not None
-        }
-        new_exams = {
-            e.name: e.mark
-            for e in new_subj.exams
-            if e.name and e.mark is not None
-        }
+        old_exams = _exam_key(old_subj.exams)
+        new_exams = _exam_key(new_subj.exams)
 
-        for exam_name, new_mark in new_exams.items():
-            old_mark = old_exams.get(exam_name, "0")
-            if str(old_mark).strip() != str(new_mark).strip():
+        for i, new_exam in new_exams.items():
+            old_exam = old_exams.get(i)
+            old_mark = old_exam.mark if old_exam else "0"
+            if str(old_mark).strip() != str(new_exam.mark).strip():
                 changes.append({
                     "subject": new_subj.subject_name,
                     "field": "exam",
-                    "exam_name": exam_name,
+                    "exam_name": new_exam.name,
                     "old": str(old_mark),
-                    "value": str(new_mark),
+                    "value": str(new_exam.mark),
                 })
 
     return changes
 
-
-def make_journal_string(journal: list[Journal]) -> str:
+def make_journal_string(journal: list[Journal], year: int = 2000, semester: int = 1) -> str:
     result_text = ""
 
     for subject in journal:
@@ -116,7 +116,7 @@ def make_journal_string(journal: list[Journal]) -> str:
             pass
 
         result_text += (
-            f"\n📚 <b>{subject.subject_name}</b>\n"
+            f"\n<a href='t.me/testcat_mew_bot?start=subject_{subject.subject_id}_{year}_{semester}'>📚 <b>{subject.subject_name}</b></a>\n"
             f"{'👥' if ',' in subject.tutor_list else '👤'} {subject.tutor_list}\n"
             f"{color_mark} {subject.total_mark}{exam_text}\n"
         )
@@ -124,11 +124,11 @@ def make_journal_string(journal: list[Journal]) -> str:
     return result_text or "<i><b>Нет данных в журнале.</b></i>"
 
 
-def make_changes_string(changes: list[dict], year: int = 2000, semester: str = "1") -> str:
+def make_changes_string(changes: list[dict], year: int = 2000, semester_name: str = "1") -> str:
     if not changes:
         return "Нет изменений в оценках."
 
-    result_text = f"❗️<b>Изменения в оценках ({year} / {semester})</b>\n"
+    result_text = f"❗️<b>Изменения в оценках ({year} / {semester_name})</b>\n"
     current_subject = None
 
     for change in changes:
@@ -148,6 +148,40 @@ def make_changes_string(changes: list[dict], year: int = 2000, semester: str = "
             result_text += f"   • {exam_name}: {old} → {value}\n"
 
     return result_text
+
+
+def make_journal_marks_string(journal_marks_resp: JournalMarksResponse) -> str:
+    journal = journal_marks_resp.journal_response.subjects
+    marks = journal_marks_resp.journal_marks
+    
+    if not journal:
+        return "<b>Нет данных по этому предмету.</b>"
+    
+    result_lines = [
+        f"📚 <b>Оценки по предмету</b>",
+        f"<b>{journal.subject_name}</b>",
+        "",
+    ]
+
+    for i, mark in enumerate(marks):
+        if i > 0:
+            result_lines.append("──────────────────")
+            result_lines.append("")
+
+        result_lines.append(f"<b>📂 {mark.group_name}</b>")
+        result_lines.append(f"    👤 <i>{mark.tutor}</i>")
+
+        if not mark.months:
+            result_lines.append("    <i>Нет оценок</i>")
+        else:
+            for month in mark.months:
+                result_lines.append(f"    📅 <b>{month.month}</b>")
+                for m in month.marks:
+                    result_lines.append(f"        • {m.day:>2} число  →  <code>{m.mark}</code>")
+
+        result_lines.append("")
+
+    return "\n".join(result_lines)
 
 
 def get_auth(user_id: int) -> tuple[str, str, str] | None:
@@ -180,3 +214,4 @@ def translit(text: str) -> str:
     for ch in text.lower():
         result.append(_CYR_TO_LAT.get(ch, ch))
     return "".join(result)
+

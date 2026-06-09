@@ -58,7 +58,7 @@ async def _ask_institution_type(target: Message, user_id: int, state: FSMContext
         )
 
 
-@router.message(CommandStart())
+@router.message(CommandStart(deep_link=False))
 async def command_start_handler(message: Message) -> None:
     creds = get_auth(message.from_user.id)  # Just to check if auth exists
     

@@ -2,7 +2,7 @@ import httpx
 from typing import Optional, Literal
 from config import app_config
 from api.cache import cache, CacheType
-from schemas.journal import Journal, JournalMarks
+from schemas.journal import Journal, JournalMarksResponse
 from schemas.terms import (
     CurrentTerm, CurrentYear,
     Terms, Years, StudyRoomsYears
@@ -95,14 +95,14 @@ class PlatonusApi:
         return [Journal.model_validate(item) for item in data]
 
     @cache(CacheType.LOGIN, ttl=60)
-    async def get_journal_marks(self, subject_id: int, study_year: int, term: int) -> dict:
+    async def get_journal_marks(self, subject_id: int, study_year: int, term: int) -> JournalMarksResponse:
         path = f"/mobile/journalMarks/{subject_id}"
         data = await self._post(
             path,
             payload={"studyYear": study_year, "term": term},
             params={"lang": self.language_num}
         )
-        return data
+        return JournalMarksResponse.model_validate(data)
     
     @cache(CacheType.UNIVERSITY, ttl=300)
     async def get_main_menu(self) -> dict:

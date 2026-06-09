@@ -38,7 +38,7 @@ async def command_start_handler(message: Message) -> None:
         f"<b>⭐ GPA:</b> {user_info.get('gpa', 'N/A')}\n\n"
         
         f"<b>🎓 Специальность:</b> {user_info.get('professionName', 'Unknown')}\n"
-        f"<b>🏛️ ВУЗ:</b> {university.get('nameRu', 'Unknown')}\n",
+        f"<b>🏛️ УЗ:</b> {university.get('nameRu', 'Unknown')}\n",
         parse_mode=ParseMode.HTML,
     )
 
@@ -63,4 +63,3 @@ async def command_start_handler(message: Message) -> None:
 #         parse_mode=ParseMode.HTML
 #     )
 #     await callback_query.answer(cache_time=10)
-

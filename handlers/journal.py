@@ -1,9 +1,7 @@
-import math
 import logging
-from os import path
 
 from aiogram import Router
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
@@ -11,7 +9,8 @@ from aiogram.exceptions import TelegramBadRequest
 from api.p_api import PlatonusApi
 from utils import (
     save_json, load_json, diff_journal, get_auth,
-    make_journal_string, make_changes_string, get_journal_path
+    make_journal_string, make_changes_string, get_journal_path,
+    make_journal_marks_string
 )
 from config import app_config
 from keyboards.journal import (
@@ -20,10 +19,10 @@ from keyboards.journal import (
 )
 from schemas.journal import Journal
 from schemas.terms import (
-    Terms, CurrentTerm,
-    CurrentYear, Years, StudyRoomsYears
+    Terms
 )
-
+from filters.prefix_deeplink import PrefixDeeplinkFilter
+from httpx import HTTPStatusError
 
 log = logging.getLogger(__name__)
 router = Router()
@@ -63,9 +62,9 @@ async def get_journal_data(
     save_json(Journal.dump_list(journal), journal_path)
     
     changes = diff_journal(old_journal, journal)
-    changes_text = make_changes_string(changes, year=year, semester=semester_name) if changes else ""
+    changes_text = make_changes_string(changes, year=year, semester_name=semester_name) if changes else ""
 
-    journal_text = make_journal_string(journal)
+    journal_text = make_journal_string(journal, year=year, semester=semester)
 
     return journal, journal_text, changes, changes_text
 
@@ -258,3 +257,47 @@ async def journal_finish_callback_handler(callback_query: CallbackQuery, callbac
             )
             
     await callback_query.answer(cache_time=3)
+
+
+@router.message(CommandStart(deep_link=True), PrefixDeeplinkFilter(prefix="subject_"))
+async def journal_detail_command(message: Message, command: CommandObject, payload: str) -> None:
+    parts = payload.split("_")
+    if len(parts) < 3:
+        await message.answer("Некорректная команда. Используйте кнопки для навигации по журналу.")
+        return
+    
+    try:
+        subject_id = int(parts[0])
+        year = int(parts[1])
+        semester = int(parts[2])
+    except (ValueError, IndexError) as e:
+        log.warning(f"Ошибка при разборе payload: {e}")
+        await message.answer("Некорректная команда. Используйте кнопки для навигации по журналу.")
+        return
+    
+    creds = get_auth(message.from_user.id)
+    if not creds:
+        await message.answer("Сначала привяжи аккаунт через /login")
+        return
+    
+    try:
+        await message.delete()
+    except:
+        pass
+    
+    login, password, host = creds
+    async with PlatonusApi(host=host, login=login, password=password) as api:
+        try:
+            journal_marks_resp = await api.get_journal_marks(subject_id=subject_id, study_year=year, term=semester)  # study_year и term не нужны для получения оценок по предмету
+        except HTTPStatusError as e:
+            if e.response.status_code == 404:
+                await message.answer("Невозможно получить оценки в вашем колледже или университете.")
+                return
+        except Exception as e:
+            log.warning(f"Ошибка при получении оценок: {e}")
+            await message.answer("Произошла ошибка при получении оценок.")
+            return
+        else:
+            journal_marks_text = make_journal_marks_string(journal_marks_resp)
+            
+        await message.answer(journal_marks_text, parse_mode=ParseMode.HTML)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import IntEnum
 from typing import Optional
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from .base import BaseSchema
 
 
@@ -19,10 +19,16 @@ class Journal(BaseSchema):
     center_mark: float = Field(alias="centerMark")
     total_mark: str = Field(alias="totalMark")
     color: str
-    box_height: str
-    subject_id: int = Field(alias="subjectID")
+    box_height: Optional[str] = Field(None, alias="boxHeight")
+    subject_id: int = Field(
+        validation_alias=AliasChoices("subjectID", "subjectId"),
+        serialization_alias="subjectID"
+    )
     exams: list[ExamSchema]
-    control_form_id: int = Field(alias="controlFormID")
+    control_form_id: int = Field(
+        validation_alias=AliasChoices("controlFormID", "controlFormId"),
+        serialization_alias="controlFormID"
+    )
 
 
 # ===== ATTENDANCE =====
@@ -59,7 +65,7 @@ class Mark(BaseSchema):
     mark: float
     mark_type_id: int = Field(alias="markTypeID")
     add_mark_type_id: int = Field(alias="addMarkTypeID")
-    mark_name: str = Field(alias="markName")
+    mark_name: Optional[str] = Field(None, alias="markName")
 
 
 class Month(BaseSchema):
@@ -72,3 +78,12 @@ class JournalMarks(BaseSchema):
     tutor: str
     months: list[Month]
     study_group_id: int = Field(alias="studyGroupID")
+
+
+class JournalResponse(BaseSchema):
+    subjects: Optional[Journal] = None
+
+
+class JournalMarksResponse(BaseSchema):
+    journal_response: JournalResponse = Field(alias="journalResponse")
+    journal_marks: list[JournalMarks] = Field(alias="journalMarks")
